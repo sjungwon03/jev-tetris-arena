@@ -1,2 +1,70 @@
-import {readFile,writeFile,mkdir,rm} from 'node:fs/promises';
-const root=new URL('../',import.meta.url);let engine=await readFile(new URL('public/engine.js',root),'utf8'),proxy=await readFile(new URL('worker/proxy.js',root),'utf8');proxy=proxy.replace(/^import .*?;\n/,'');const assets={};for(const path of ['index.html','style.css','app.js','engine.js'])assets['/'+path]=await readFile(new URL('public/'+path,root),'utf8');assets['/']=assets['/index.html'];const source=engine+'\n'+proxy+'\nconst assets='+JSON.stringify(assets)+';\nexport default {async fetch(request,env){const path=new URL(request.url).pathname;if(path.startsWith("/api/"))return api(request,env);if(!Object.hasOwn(assets,path))return new Response("Not found",{status:404});return new Response(assets[path],{headers:{"Content-Type":path.endsWith(".js")?"text/javascript; charset=utf-8":path.endsWith(".css")?"text/css; charset=utf-8":"text/html; charset=utf-8","X-Content-Type-Options":"nosniff"}})}};\n';await rm(new URL('dist/',root),{recursive:true,force:true});await mkdir(new URL('dist/server/',root),{recursive:true});await mkdir(new URL('dist/.openai/',root),{recursive:true});await writeFile(new URL('dist/server/index.js',root),source);await writeFile(new URL('dist/.openai/hosting.json',root),await readFile(new URL('.openai/hosting.json',root)));console.log('Built dist/server/index.js');
+/** Compile typed source instead of concatenating JS strings. Never embeds runtime env values. */
+import { build } from "esbuild";
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  rm,
+  readdir,
+  copyFile,
+} from "node:fs/promises";
+const root = new URL("../", import.meta.url);
+await rm(new URL("dist", root), { recursive: true, force: true });
+await mkdir(new URL("dist/client/assets/", root), { recursive: true });
+await mkdir(new URL("dist/server/", root), { recursive: true });
+await mkdir(new URL("dist/.openai/", root), { recursive: true });
+await build({
+  entryPoints: [new URL("src/client/main.tsx", root).pathname],
+  outfile: new URL("dist/client/assets/app.js", root).pathname,
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  jsx: "automatic",
+  minify: true,
+  define: { "process.env.NODE_ENV": '"production"' },
+});
+const html = (await readFile(new URL("index.html", root), "utf8")).replace(
+  '<script type="module" src="/src/client/main.tsx"></script>',
+  '<link rel="stylesheet" href="/assets/app.css"/><script type="module" src="/assets/app.js"></script>',
+);
+await writeFile(new URL("dist/client/index.html", root), html);
+const assets = {
+  "/": { body: html, type: "text/html; charset=utf-8" },
+  "/index.html": { body: html, type: "text/html; charset=utf-8" },
+};
+for (const name of await readdir(new URL("dist/client/assets/", root)))
+  assets["/assets/" + name] = {
+    body: await readFile(new URL("dist/client/assets/" + name, root), "utf8"),
+    type: name.endsWith(".css")
+      ? "text/css; charset=utf-8"
+      : "text/javascript; charset=utf-8",
+  };
+await build({
+  entryPoints: [new URL("src/server/worker.ts", root).pathname],
+  outfile: new URL("dist/server/index.js", root).pathname,
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  plugins: [
+    {
+      name: "browser-assets",
+      setup(builder) {
+        builder.onResolve({ filter: /^virtual:assets$/ }, () => ({
+          path: "assets",
+          namespace: "generated",
+        }));
+        builder.onLoad({ filter: /.*/, namespace: "generated" }, () => ({
+          contents: JSON.stringify(assets),
+          loader: "json",
+        }));
+      },
+    },
+  ],
+});
+await copyFile(
+  new URL(".openai/hosting.json", root),
+  new URL("dist/.openai/hosting.json", root),
+);
+console.log("Built React client and TypeScript Worker in dist/");

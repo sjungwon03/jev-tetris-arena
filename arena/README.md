@@ -1,135 +1,130 @@
-# JEV Arena
+# JEV 테트리스 아레나 — React + TypeScript
 
-사용자와 JEV 하네스가 40줄 스프린트로 대결하는 테트리스. 의존성 설치 없이 Node.js 22 이상으로 실행합니다.
+사용자와 JEV가 같은 블록 순서로 40줄 스프린트를 겨룹니다. 화면은 React, 게임 엔진·서버 하네스·API 계약은 strict TypeScript로 작성했습니다.
+
+## 실행과 검증
+
+Node.js 22 이상이 필요합니다.
 
 ```sh
-cd arena
+npm ci
 cp .env.example .env
-# .env에서 JEV_MODEL과 JEV_API_KEY 설정
-node server.mjs
+# 서버용 API 키와 연결 방식 설정
+npm run dev
 ```
 
-주소: http://localhost:3000
+[로컬 게임](http://localhost:3000)을 엽니다. Vite가 React/TSX를 처리하고 같은 Node 서버가 `/api/*` 프록시를 실행합니다. API 키는 브라우저로 전달하지 않습니다.
 
-## 공급자 / 모델 교체
+```sh
+npm run typecheck
+npm test
+npm run build
+npm run benchmark
+```
 
-`arena/.env`를 수정하고 서버를 재시작합니다. 배포 환경에서는 Sites 런타임 환경변수를 수정한 뒤 다시 배포합니다.
+`dist/client/`는 React 번들, `dist/server/index.js`는 정적 파일과 모델 프록시를 함께 제공하는 Worker입니다. 빌드는 esbuild가 TypeScript 모듈의 import 관계를 따라 번들링하며, 소스 문자열을 이어 붙이거나 import를 정규식으로 제거하지 않습니다.
 
-| 변수 | 용도 | 기본값 |
+## JEV 사용 코드를 읽는 순서
+
+| 순서 | 파일 | 역할 |
 | --- | --- | --- |
-| JEV_BASE_URL | OpenAI 호환 API 기본 URL | https://jev.sanhouse.kr/v1 (`decisions` 모드) |
-| JEV_MODEL | JEV 표시 이름 / chat·responses 공급자의 정확한 모델 ID | decisions: JEV / 그 외 미설정 시 데모 |
-| JEV_API_KEY | 서버 전용 Bearer API 키 | 없음 |
-| JEV_API_STYLE | decisions / chat / responses | 예시 환경설정: decisions |
-| PORT | 로컬 HTTP 포트 | 3000 |
+| 1 | `src/shared/contracts.ts` | 보드·배치·요청·응답·보정·진단 로그의 공통 타입 |
+| 2 | `src/client/game/BattleController.ts` | 현재 보드를 복사하고 모델 요청을 시작하는 `plan()`, 응답을 실행하는 `stepAi()` |
+| 3 | `src/client/api.ts` | 브라우저가 같은 출처의 `POST /api/move`를 호출하는 타입 있는 클라이언트 |
+| 4 | `src/server/api.ts` | 입력 검사, 어댑터 선택, 진단 이벤트, 응답 조립 |
+| 5 | `src/server/jev/planner.ts` | 테트리스 요령, 후보 지표, 다음 블록 예측, 평가 순위, 실제 JEV 프롬프트 |
+| 6 | `src/server/jev/decisions.ts` | `state/question/options` 요청, 인증, JEV 응답 검증, 토큰 한도 재분할 |
+| 7 | `src/server/jev/selectionGuard.ts` | 모델 원래 선택과 실제 적용할 선택을 구분하는 선택 보정 |
+| 8 | `src/client/components/JevMonitor.tsx` | 원 요청·응답·확률·모델 원래 선택·보정 결과 표시 |
 
-키를 브라우저 또는 저장소에 넣지 않습니다. `.env`는 Git에서 제외됩니다. `/api/config`는 키를 반환하지 않습니다. API 키가 필요한 공급자는 서버 환경변수에 설정하세요. llm.sanhouse.kr 모델 목록은 인증 없이 요청했을 때 401을 반환했습니다. 실제 모델 호출은 모델 ID와 유효한 키를 설정한 뒤 확인해야 합니다.
+`src/server/jev/openai.ts`는 선택 가능한 Chat Completions / Responses 어댑터입니다. 실제 JEV 결정 API와 별도 파일이므로 두 연결 방식을 혼동하지 않고 읽을 수 있습니다.
 
-## 하네스
+### 실제 요청 흐름
 
-브라우저 → 같은 출처의 `POST /api/move` → 서버에서 보드 검증 → 가능한 배치 계산 → 모델 호출 → JSON 파싱 / 배치 검증 → 브라우저에서 실행.
-
-서버가 전달하는 관측값은 20×10 보드, 현재 블록, 다음 블록, 가능한 회전·좌표입니다. 모델의 원문 설명은 실행하지 않습니다. 실패·불가능한 수·20초 초과 시 대결이 일시정지됩니다. 실제 모델 모드에서 로컬 알고리즘으로 자동 대체하지 않습니다. `worker/proxy.js`에서 공급자 어댑터를 수정할 수 있습니다. Chat Completions와 Responses를 지원합니다.
-
-모델 ID를 설정하지 않았을 때만 브라우저의 배치 평가 AI를 사용하며 화면에 데모 모드로 표시합니다. 모델의 홀드 판단이나 garbage 공격은 현재 포함하지 않습니다. 양쪽에 같은 7-bag 순서를 제공합니다. 회전은 간단한 wall kick을 사용합니다.
-
-## 확인 / 배포 아티팩트
-
-```sh
-cd arena
-node test/game.test.mjs
-node scripts/build.mjs
-node --check dist/server/index.js
+```text
+React 화면의 배틀 시작
+  → BattleController.plan(): { board, piece, next, assist }
+  → modelApi.move(): POST /api/move
+  → api(): 보드·출처·요청 크기 검증
+  → rankPlans(): 전체 후보와 다음 블록 결과 계산
+  → runJev(): 상위 후보를 POST {JEV_BASE_URL}/decisions로 전송
+  → parseJevDecision(): prediction / prediction_index 대조
+  → guardSelection(): 보정 여부와 원래 선택 보존
+  → MoveResponse.trace: 통신·모델 식별·보정·시간 정보
+  → BattleController: 오래된 응답 폐기, 배치 실행
+  → React: 보드·통신 패널·성능 로그 갱신
 ```
 
-빌드 결과 `dist/server/index.js`는 정적 파일과 프록시를 포함하는 Cloudflare Worker ES module입니다. 로컬과 배포 환경은 같은 프록시·게임 엔진을 사용합니다. 인증과 비공개 사이트 접근은 Sites가 처리합니다. 로컬 개발 서버는 신뢰하는 개발 환경에서 실행하세요.
+JEV 네이티브 호출 예시는 `decisions.ts`의 `round()`에 있습니다. 인증 헤더는 이 서버 모듈에서만 만듭니다. 네이티브 API에 `model` 필드를 추가하지 않습니다.
 
-## 실제 JEV 결정 API
-
-배포 설정은 `JEV_BASE_URL=https://jev.sanhouse.kr/v1`, `JEV_API_STYLE=decisions`를 사용합니다. 기존 비밀 `JEV_API_KEY`를 유지합니다. 네이티브 API에는 `model` 필드를 보내지 않습니다.
-
-요청은 문자열 `state`, 문자열 `question`, 문자열 배열 `options`만 포함합니다. 실제 API에서 확인한 제한: state 1~3000자, 중복 없는 옵션 2~20개, 각 옵션 1~200자. 응답은 `prediction`, `prediction_index`, `confidence`, `probabilities`입니다. 선택 문자열과 인덱스가 실제 후보와 일치해야 실행합니다.
-
-회전 대칭으로 같은 칸에 놓이는 배치는 중복 제거합니다. 20개를 넘으면 모든 고유 배치를 예선 그룹에 나누어 JEV가 각각 선택하고, 승자들을 다시 JEV가 최종 선택합니다. 로컬 점수로 후보를 줄이지 않습니다. 예선과 최종 요청·응답을 모두 통신 패널에 남깁니다. 화면의 신뢰도와 확률은 최종 후보 집합 기준이며 전체 배치에 대한 확률이 아닙니다. 유일한 배치만 가능한 경우 모델 호출 없이 실행하고 그 사실을 표시합니다.
-
-실제 네이티브 API로 34개 후보의 예선·최종 선택, 검증 및 신뢰도 반환을 확인했습니다. `/api/health` 연결 확인도 실제 결정 API를 호출합니다.
-
-## 성능 진단 로그
-
-각 게임 요청은 `X-JEV-Request-ID`, `X-JEV-Session-ID`, `X-JEV-Turn`으로 식별합니다. 서버는 `source=jev-performance` JSON 로그를 표준 출력에 기록합니다. Sites Worker 로그에서 같은 요청 ID를 검색하면 브라우저 기록과 연결됩니다. 보존 기간은 호스팅 로그 정책에 따르며 별도 데이터베이스는 사용하지 않습니다.
-
-- `turn.started/completed/failed`: 보드·다음 블록·후보 수, 전체 서버 시간, 선택, 신뢰도, 호출 수.
-- `jev.call.started/completed/failed`: 예선/최종 단계, 요청 크기·옵션, 응답 HTTP 상태, 헤더 수신 대기 `headersMs`, 본문 수신/JSON 해석 `decodeMs`, 호출 전체 `durationMs`와 오류 분류. `headersMs`에는 외부 네트워크와 JEV 서버 처리가 함께 포함되며 모델 내부 추론 시간만을 뜻하지 않습니다.
-- 브라우저 로그: 전체 왕복, 선택부터 실제 배치까지 시간, 배치 전후 보드·구멍 수·최대 높이·지운 줄 수, 서버 이벤트 및 실제 요청/응답. API 키·인증 헤더·업스트림 오류 본문은 기록하지 않습니다.
-
-화면의 **성능 진단 기록 → JSON 로그 다운로드**로 로그를 받을 수 있습니다. 최근 최대 120턴, 직렬화된 JSON 약 1.5MB를 브라우저 localStorage에 저장하며 새 게임·새로고침 후에도 유지합니다. 한도가 차면 오래된 로그부터 제거합니다. 저장 공간 오류가 나면 화면에 알리며 메모리 내 내보내기는 계속 가능합니다. P95는 완료된 브라우저 요청 시간(실패 포함)의 nearest-rank 값입니다. 대기 중인 요청은 평균·P95에서 제외됩니다.
-
-## 후보 지표와 모델 비교
-
-`candidate-features-v2` 입력은 각 후보의 실제 배치와 줄 제거 후 `lines`(지운 줄), `holes`(블록 아래 빈칸), `height`(최대 높이), `totalHeight`(높이 합), `bumpiness`(인접 높이 차이 합)를 옵션에 함께 보냅니다. JEV는 이를 참고해 선택하며 후보를 로컬 점수로 걸러내지 않습니다. 이 입력 변경의 효과나 4B 모델의 우수성을 가정하지 않습니다. 게임 선택 후 적용 지연과 API 호출 수는 별도로 기록합니다.
-
-`JEV_MODEL`은 네이티브 API의 표시 이름입니다. 실제 모델은 응답의 `model_id` 또는 `model`이 제공되면 `api_response`로 기록합니다. 운영자가 설정한 `JEV_UPSTREAM_MODEL_ID`는 `operator_configuration`으로 구분합니다. 둘 다 없으면 `unreported`로 남깁니다. 예전 기록의 모델 ID는 사후 추정하지 않습니다. 요청 버전도 없는 옛 로그는 `legacy-unversioned`입니다.
-
-실제 로그의 요청을 그대로 재실행해 0.8B/4B 같은 비교에 사용할 수 있습니다. 브라우저 JSON 내보내기와 서버 샘플 로그를 지원하며 `state`, `question`, `options` 문자열을 바꾸지 않습니다. 예선 및 최종 요청을 고정해 재생하므로 이는 개별 결정의 비교이며, 새 모델의 예선 결과로 결승 후보를 다시 구성하는 전체 게임 평가가 아닙니다.
-
-```sh
-# 네트워크 호출 없이 로그에서 요청 추출 확인
-node scripts/replay.mjs --input diagnostics/jev-performance-sample.json --output diagnostics/replay-dry-run.json
-
-# API 키는 서버 환경에 주입. --label은 실험 이름이며 실제 모델 확인을 뜻하지 않음.
-node --env-file=.env scripts/replay.mjs --input your-export.json --endpoint https://comparison.example/v1/decisions --label 4B-experiment --output diagnostics/4b-results.json
+```ts
+// 실제 요청 타입: src/shared/contracts.ts
+interface DecisionRequest {
+  state: string;
+  question: string;
+  options: string[];
+}
 ```
 
-결과는 원 요청 ID·턴·단계·입력 버전·요청 SHA-256, 이전 선택(로그에 있을 때), 새 선택·선택 변경 여부·신뢰도·실제 모델 보고값·호출 시간을 포함합니다. API 키·인증 헤더·업스트림 오류 본문은 출력하지 않습니다. 비교 대상 URL이 없으면 dry-run만 수행합니다. 4B 검증에는 4B가 배포된 대상 URL이 필요합니다.
+JEV의 반환값은 코드나 자유로운 지시로 실행하지 않습니다. `prediction`이 전송한 옵션 중 하나인지 확인하고, `prediction_index`가 있다면 동일한 옵션을 가리키는지 확인한 뒤 원래 `Move`에 매핑합니다.
 
-JEV 추가 제한도 실제 응답에서 확인했습니다: question 최대 500자, state와 분기 입력에 토큰 상한이 있으므로 v2 state의 보드는 20개의 10자리 0/1 문자열로, 회전 모양도 행 문자열로 압축합니다. 색 정보는 선택에 쓰이지 않아 생략하고 점유 상태를 보존합니다. 원본 보드는 진단 로그에 계속 남깁니다.
+## 구성
 
-## 입력 토큰 초과 복구 (v3)
+```text
+src/
+  domain/tetris.ts               순수 게임 규칙·배치 시뮬레이션
+  shared/contracts.ts           브라우저/서버 공통 타입
+  server/
+    api.ts                      HTTP 라우트와 어댑터 조합
+    http.ts                     안전한 오류·진단·응답 유틸리티
+    dev.ts                      로컬 Node + Vite 개발 서버
+    worker.ts                   배포용 Worker 진입점
+    jev/
+      planner.ts                프롬프트·후보 평가·다음 블록 예측
+      decisions.ts              JEV 전용 API 클라이언트
+      selectionGuard.ts         선택 보정
+      openai.ts                 교체형 LLM 어댑터
+  client/
+    App.tsx                     React 화면과 사용자 이벤트
+    api.ts                      같은 출처의 프록시 호출
+    game/BattleController.ts    게임 루프·취소·로그 상태
+    components/                 보드·플레이어·통신·진단 패널
+```
 
-운영 중 실제 실패 보드에서 `branch too long: 714 tokens with a 320-token state (row limit 1024)`라는 HTTP 400을 재현했습니다. `candidate-features-v3-compact`는 중복 회전 행렬을 state에서 제거하고, 후보를 `[rotation,x,y | lines,holes,height,totalHeight,bumpiness]`로 압축합니다. 각 지표의 의미는 question에 한 번만 정의합니다.
+컨트롤러는 React 외부의 게임 상태를 관리하고 `useSyncExternalStore`로 화면에 연결합니다. 컴포넌트는 `document.getElementById`로 내용을 수정하지 않습니다. Canvas 그리기와 파일 다운로드만 브라우저 API를 사용합니다. 통신·성능 패널은 메모이제이션해 매 프레임 큰 JSON을 다시 직렬화하지 않습니다.
 
-JEV가 위 형식의 토큰 한도 오류를 반환하면 해당 후보 집합을 반으로 나눠 JEV에 다시 평가시키고 승자들의 최종 선택을 받습니다. 다른 400이나 인증 오류는 재시도하지 않습니다. 최소 2개 후보도 한도를 초과하면 원인을 명시해 중단합니다. 모든 재분할·실패·실제 API 시도 수는 진단 이벤트에 남습니다. 기존 요청 전체의 20초 제한은 유지합니다.
+## 서버 환경변수
 
-화면에는 입력 크기 제한·응답 시간 초과·선택 검증 오류·업스트림 HTTP 상태·게임 HTTP 상태·요청 ID를 구분해 표시합니다. 원문 오류 본문 전체는 반환하지 않으며, 확인된 토큰 한도 형식의 숫자만 추출합니다. `test/fixtures/failed-jev-request.json`은 실제 실패한 요청과 점유 보드만 보존한 회귀 검증용 데이터입니다.
+| 이름 | 용도 |
+| --- | --- |
+| `JEV_BASE_URL` | 실제 JEV: `https://jev.sanhouse.kr/v1` |
+| `JEV_API_STYLE` | `decisions` / `chat` / `responses` |
+| `JEV_MODEL` | 네이티브 표시 이름 또는 LLM의 정확한 모델 ID |
+| `JEV_API_KEY` | 서버 전용 Bearer 키 |
+| `JEV_UPSTREAM_MODEL_ID` | 알고 있는 실제 모델 ID를 운영자가 명시하는 선택 설정 |
+| `JEV_CANDIDATE_LIMIT` | 네이티브 후보 개수, 기본 4. `0`은 전체 후보 |
+| `PORT` | 로컬 개발 포트, 기본 3000 |
 
-## 현재 연결: LLM + JEV 하네스
+`.env.example`은 설정 예시일 뿐 현재 운영값의 증거가 아닙니다. 운영값은 Sites 런타임 설정이며 배포가 이를 반영합니다. 키는 `.env` 또는 런타임 비밀 환경변수에만 넣고, Git과 브라우저에 넣지 않습니다.
 
-배포 설정은 `JEV_BASE_URL=https://llm.sanhouse.kr/v1`, `JEV_API_STYLE=chat`, `JEV_MODEL=qwen3.6-35b-a3b`입니다. 기존 비밀 키를 유지합니다. 위의 네이티브 JEV 설정은 전환 가능한 별도 어댑터 설명입니다.
+## 실력 보정과 진단
 
-LLM 모드는 가능한 전체 배치와 각 배치 후 지표를 단일 `/chat/completions` 요청에 전달합니다. JSON의 회전·좌표를 합법적인 배치 집합과 대조한 뒤 실행합니다. 네이티브 JEV의 20개 옵션 제한에 따른 예선·최종 호출은 LLM 모드에 적용하지 않습니다. 입력 버전은 `llm-harness-features-v1`로 구분합니다. 네이티브 방식과 동일하게 모델 식별 정보·배치 지표·오류·통신 로그·성능 기록을 보존합니다.
+‘실력 보정’이 켜진 게임은 요청의 `assist: true`로 명시됩니다. 동률 선택은 그대로 두고, 평가가 낮은 선택은 하네스 1위로 보정합니다. 모델의 원래 응답·선택·확률을 변경하지 않고 별도 `selectionGuard`와 이벤트에 적용 결과를 남깁니다. 보정 모드 성적은 JEV 모델 단독 성적과 구분해야 합니다.
 
-## 생존 우선 프롬프트 (v4)
+모델 ID는 응답에서 제공될 때만 `api_response`, 운영자가 지정하면 `operator_configuration`, 둘 다 없으면 `unreported`로 기록합니다. 입력 버전·요청 ID·턴·호출 단계·실패·타임아웃·현재 보드·실행 결과를 보존합니다.
 
-`candidate-features-v4-survival`은 숫자 튜플 대신 후보를 `SAFE r0 x0 y18; clear0 holes0(+0) high2 stack4 rough3`처럼 표시합니다. 구멍 수의 변화는 실제 현재 보드를 기준으로 계산합니다. `SAFE`는 새 구멍을 만들지 않는다는 뜻이며 생존·승리를 보장하는 라벨이 아닙니다.
+브라우저는 최근 최대 120턴(약 1.5MB)을 localStorage에 저장합니다. 화면의 **JSON 로그 다운로드**로 받을 수 있습니다. 서버는 같은 요청 ID를 가진 `jev-performance` JSON 로그를 표준 출력에 남깁니다. 인증키·인증 헤더·알 수 없는 업스트림 오류 본문은 기록하지 않습니다.
 
-프롬프트는 새 구멍 생성 회피 → 총 구멍 감소 → 줄 제거 → 높이·전체 높이 합·굴곡 감소의 순서를 명시합니다. 높이가 16칸 이상이면 천장에 닿지 않도록 높이 감소를 우선합니다. r/x/y를 품질 점수로 해석하거나 4줄 제거를 위해 구멍을 만드는 선택을 피하도록 지시합니다. v4에서는 모든 고유 후보를 JEV가 평가했습니다. v5의 후보 선별 동작은 아래에 명시합니다.
+JEV 입력 제한: question 500자, state 3,000자, 중복 없는 옵션 2~20개, 옵션당 200자. 추가 토큰 제한이 발생하면 해당 후보 집합을 나눠 평가합니다. 요청 전체 20초, 브라우저 대기 22초 제한을 유지합니다.
 
-question 500자·options 각 200자 제한과 토큰 초과 재분할은 유지합니다. 로그 버전으로 이전 프롬프트와 구분할 수 있습니다. 실제 운영 보드 3개로 전후 비교를 시도했으나 비교 시점의 API 타임아웃·HTTP 503으로 비교를 완료하지 못했습니다. 따라서 이 변경의 승률·줄 제거 수 개선은 아직 검증되지 않았습니다. 결과는 로컬 `diagnostics/prompt-comparison.json`에 보존합니다.
+## 재실행과 테스트
 
-## 다음 블록 계획 보조 (v5)
+```sh
+npm run replay -- --input your-log.json --output replay-dry-run.json
+# 실행 대상이 있을 때만 실제 호출. 키는 환경변수로 주입.
+JEV_REPLAY_URL=https://comparison.example/v1/decisions npm run replay -- --input your-log.json --output replay-results.json
+```
 
-`candidate-features-v5-lookahead`는 현재 후보를 놓고 줄을 제거한 뒤, 알려진 다음 블록의 모든 고유 배치를 로컬에서 살펴봅니다. 다음 블록의 실제 시작 위치가 막히면 `BLOCKED-NEXT`로 표시합니다. 각 후보에 다음 배치의 예상 구멍·높이·제거 줄 수를 추가합니다. 예측은 고정 휴리스틱으로 고른 후속 배치이며 JEV가 실제로 그 수를 선택한다는 보장은 없습니다.
+재실행은 로그의 state/question/options를 그대로 보냅니다. 실험 이름은 실제 모델 ID의 확인 근거로 사용하지 않습니다. 예선·최종 요청을 고정 재생하는 도구이며 전체 게임 평가와 구분해야 합니다.
 
-각 후보의 두 수 평가 순위 `p`와 1위인 `BEST-PLAN`도 전달합니다. 먼저 다음 블록 진입 가능 여부와 현재 배치 후 구멍 수를 우선하고, 동률 후보는 현재 및 다음 배치의 줄 제거·높이 합·굴곡·최대 높이 평가로 정렬한 뒤, JEV에 가장 낮은 p 순위를 우선하도록 지시합니다. 현재 배치 평가 0.35, 다음 배치 평가 0.65를 반영하고 현재 제거 줄 수에 추가 보상을 줍니다. 다음 블록이 막히는 경우 큰 감점을 적용합니다. 이 순위는 계산된 보조 정보이며 모델이 반환한 합법적 선택을 실행합니다. 모델 선택을 서버에서 1위 후보로 강제 교체하지 않습니다.
-
-순위는 전체 고유 후보 기준으로 한 번 계산하여 예선·최종·토큰 초과 재분할 간에 일관되게 유지합니다. 화면과 JSON 로그에 선택의 평가 순위와 다음 블록 예상 결과를 표시합니다. 계산 시간은 `jev.lookahead.prepared` 이벤트로 기록합니다.
-
-### v5 후보 선별
-
-현재 기본값은 `JEV_CANDIDATE_LIMIT=4`입니다. 하네스가 전체 고유 후보의 2수 평가 순위를 계산한 다음 상위 4개만 JEV로 전달합니다. JEV는 이 집합 안에서 최종 선택하며 순위 1위로 강제 교체하지 않습니다. 전체 후보 수·선별 후보 수·평가 순위·선별 방법을 로그와 화면에 표시합니다. 일반적인 턴은 외부 API 1회로 끝납니다. 유일한 후보만 있는 경우는 기존처럼 모델 호출 없이 배치합니다.
-
-`JEV_CANDIDATE_LIMIT=0`은 전체 후보 평가 모드입니다. 이 경우 후보 수에 따라 예선·최종 호출이 늘어납니다. 2~20의 다른 선별 개수도 설정할 수 있습니다. 계산 보조가 개입하므로 게임 결과를 JEV 모델 단독 능력으로 해석하면 안 됩니다.
-
-고정 실제 보드 3개에서 v4와 최종 v5를 각각 실제 JEV API로 비교했습니다. 배치 직후 평균 구멍 수는 16.33→13.67, 평균 최대 높이는 9→8칸이었습니다. 한 보드는 구멍이 13→14로 늘어나는 대신 높이 10→8과 굴곡 26→18로 줄었고, 다른 보드는 구멍과 높이가 같고 굴곡은 나빠졌습니다. 따라서 모든 상태의 개선이나 전체 게임 승률 향상을 입증한 결과가 아닙니다. 원시 비교 결과는 `diagnostics/lookahead-comparison.json`에 남깁니다.
-
-## 테트리스 플레이 요령 프롬프트 (v6)
-
-`candidate-features-v6-coaching`은 지표 설명 앞에 실제 40줄 스프린트 요령을 넣습니다: 안전한 1·2줄 제거를 즉시 활용하기, 4줄 제거를 기다리며 쌓지 않기, 낮고 평평한 표면 유지, 빈칸 위를 덮거나 깊은 구덩이·중앙 탑을 만들지 않기, 다음 블록 진입 공간 보존, 안전할 때만 I 블록용 우물 남기기. 전략 설명과 지표 범례를 합친 네이티브 question은 457자입니다. LLM 어댑터에도 같은 코칭을 적용하고 입력 버전을 `llm-harness-v2-coaching`으로 구분합니다. 후보 선별·평가식·게임 규칙은 그대로 유지합니다.
-
-## 선택 보정 모드 (v7)
-
-화면의 **실력 보정**은 새 배틀에서 기본으로 켜집니다. 끄면 모델이 선택한 수를 그대로 실행합니다. 켠 상태에서는 JEV의 선택을 받은 뒤 하네스 1위와 비교해, 같은 점수·구멍 수·다음 블록 가용성을 갖는 동률 선택은 그대로 두고 더 낮은 평가의 선택은 1위로 보정합니다. 새 게임 시작 시 토글 값을 고정하며 게임 종료 후 변경할 수 있습니다. `/api/move`의 `assist: true`가 명시된 네이티브 JEV 요청에서만 보정하며, 필드를 생략한 외부 요청과 LLM 모드는 기존 동작을 유지합니다.
-
-원래 선택 `modelDecision`, 최종 적용 `decision`, 보정 여부·이유·전후 순위·전후 지표를 `selectionGuard`에 보존합니다. JEV 원 응답·확률은 수정하지 않습니다. 화면에서 원래 수와 적용한 수를 구분하고, 서버의 `jev.selection.corrected` 이벤트 및 브라우저 JSON에 기록합니다. 보정 결과는 모델 단독 능력이 아닌 **하네스 보조 모드**의 결과입니다.
-
-`node scripts/benchmark-planner.mjs`로 고정 5개 7-bag 시드(11,23,37,51,73)를 재현합니다. 로컬 실험에서 하네스 1위 선택은 5/5 시드에서 40줄에 도달했고, 상위 4개 무작위 선택은 0/5(0~9줄), 보정을 적용한 같은 무작위 선택은 5/5에서 40줄에 도달했습니다. 각 판의 상한은 180개 블록입니다. 이는 JEV 호출 없이 후보 선택 흔들림을 모사한 실험이며 실제 모델 승률 측정이 아닙니다. 결과는 `diagnostics/planner-benchmark.json`입니다.
+테스트는 게임 규칙과 전체 JEV 경로의 기존 회귀 검증, 타입 있는 컨트롤러의 응답 취소·오류·로그 복원, React 화면의 서버 렌더링을 포함합니다. DOM 문자열을 흉내 내는 VM 기반 화면 테스트는 제거했습니다. `benchmark-planner.mjs`의 한 판 시뮬레이션은 모델 호출 없이 하네스 선택을 검증하므로 실제 JEV 승률로 해석하면 안 됩니다.
