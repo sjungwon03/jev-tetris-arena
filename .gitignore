@@ -1,0 +1,17 @@
+# Local tooling and credentials
+.agents/
+.aws/
+.codex/
+.env
+.env.*
+!.env.example
+
+# Generated files and local diagnostics
+node_modules/
+dist/
+diagnostics/
+*.log
+.DS_Store
+
+# Keep the nested Sites source repository local
+arena/.git
