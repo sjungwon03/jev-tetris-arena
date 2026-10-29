@@ -1,7 +1,0 @@
-import http from 'node:http';
-import {readFile} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
-import {api} from './worker/proxy.js';
-const root=new URL('./public/',import.meta.url),port=Number(process.env.PORT||3000);
-try{process.loadEnvFile(fileURLToPath(new URL('./.env',import.meta.url)))}catch(e){if(e.code!=='ENOENT')throw e}
-http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://'+req.headers.host);if(url.pathname.startsWith('/api/')){let chunks=[],bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>16000){res.writeHead(413);res.end('Request too large');return}chunks.push(chunk)}const request=new Request(url,{method:req.method,headers:req.headers,...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})});const response=await api(request,process.env);res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return}const files={'/':'index.html','/index.html':'index.html','/style.css':'style.css','/app.js':'app.js','/engine.js':'engine.js'};const file=files[url.pathname];if(!file){res.writeHead(404);res.end('Not found');return}const data=await readFile(new URL(file,root));res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8','X-Content-Type-Options':'nosniff'});res.end(data)}catch{res.writeHead(500);res.end('Internal server error')}}).listen(port,'0.0.0.0',()=>console.log('Local: http://localhost:'+port));
