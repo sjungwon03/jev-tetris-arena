@@ -1,0 +1,81 @@
+{
+  "requestId": "4b9b4d60-7606-4be3-8371-d4d7fed1d1f9",
+  "request": {
+    "state": "{\"board\":[\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000000\",\"0000000100\",\"0000011111\",\"0000000111\",\"0000101111\",\"0011111111\"],\"piece\":\"I\",\"next\":[\"J\",\"S\"],\"pieceRotations\":[[\"0000\",\"1111\",\"0000\",\"0000\"],[\"0010\",\"0010\",\"0010\",\"0010\"],[\"0000\",\"0000\",\"1111\",\"0000\"],[\"0100\",\"0100\",\"0100\",\"0100\"]]}",
+    "question": "Choose a Tetris placement. Board rows run top-down (1=filled,0=empty). Metrics are computed AFTER placement and line clears: lines=cleared rows (maximize); holes=empty cells below blocks; height=max column height; totalHeight=sum heights; bumpiness=adjacent height differences (minimize these). Aim for a low, flat stack without holes in a 40-line sprint. rotation=clockwise quarter turns; x,y=zero-based matrix origin.",
+    "options": [
+      "rotation=0,x=0,y=17; lines=0,holes=5,height=5,totalHeight=31,bumpiness=4",
+      "rotation=0,x=1,y=16; lines=0,holes=7,height=5,totalHeight=33,bumpiness=6",
+      "rotation=0,x=2,y=14; lines=0,holes=11,height=5,totalHeight=37,bumpiness=8",
+      "rotation=0,x=3,y=14; lines=0,holes=8,height=5,totalHeight=34,bumpiness=6",
+      "rotation=0,x=4,y=13; lines=0,holes=8,height=6,totalHeight=34,bumpiness=8",
+      "rotation=0,x=5,y=13; lines=0,holes=6,height=6,totalHeight=32,bumpiness=8",
+      "rotation=0,x=6,y=13; lines=0,holes=6,height=6,totalHeight=32,bumpiness=6",
+      "rotation=1,x=-2,y=16; lines=0,holes=3,height=5,totalHeight=29,bumpiness=10",
+      "rotation=1,x=-1,y=16; lines=0,holes=3,height=5,totalHeight=29,bumpiness=12",
+      "rotation=1,x=0,y=15; lines=0,holes=3,height=5,totalHeight=29,bumpiness=14",
+      "rotation=1,x=1,y=15; lines=0,holes=3,height=5,totalHeight=29,bumpiness=12",
+      "rotation=1,x=2,y=14; lines=0,holes=3,height=6,totalHeight=29,bumpiness=10",
+      "rotation=1,x=3,y=12; lines=0,holes=3,height=8,totalHeight=29,bumpiness=14",
+      "rotation=1,x=4,y=12; lines=0,holes=3,height=8,totalHeight=29,bumpiness=12",
+      "rotation=1,x=5,y=11; lines=0,holes=3,height=9,totalHeight=29,bumpiness=14",
+      "rotation=1,x=6,y=12; lines=0,holes=3,height=8,totalHeight=29,bumpiness=12",
+      "rotation=1,x=7,y=12; lines=0,holes=3,height=8,totalHeight=29,bumpiness=10"
+    ]
+  },
+  "observation": {
+    "board": [
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000000",
+      "0000000100",
+      "0000011111",
+      "0000000111",
+      "0000101111",
+      "0011111111"
+    ],
+    "piece": "I",
+    "next": [
+      "J",
+      "S"
+    ],
+    "pieceRotations": [
+      [
+        "0000",
+        "1111",
+        "0000",
+        "0000"
+      ],
+      [
+        "0010",
+        "0010",
+        "0010",
+        "0010"
+      ],
+      [
+        "0000",
+        "0000",
+        "1111",
+        "0000"
+      ],
+      [
+        "0100",
+        "0100",
+        "0100",
+        "0100"
+      ]
+    ]
+  }
+}
